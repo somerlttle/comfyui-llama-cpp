@@ -6,3 +6,9 @@ checkpoints/
 .pytest_cache
 .DS_Store
 .workbuddy/
+
+# 本地素材库 (face/costume/pose-gallery, 共约 4.1GB, 自包含不依赖外部路径, 不纳入版本库)
+resources/
+
+# Windows 保留设备名残留文件, 无法用常规方式删除, 仅隐藏
+nul
