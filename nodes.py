@@ -28,21 +28,6 @@ from .support.prompt_optimizer_prompts import (
     MAIN_INFERENCE_PROMPT_RULE,
 )
 
-# 数据驱动 Skill 系统 (移植自 ComfyUI-llama_Dapao/skills, 见 support/skill_loader.py)
-from .support.skill_loader import (
-    SKILL_REGISTRY,
-    skill_instructions as _load_skill_instructions,
-    detect_h3_mode as _detect_skill_h3_mode,
-)
-
-# 「技能 Skill」下拉 (数据驱动; "无 (默认)" 表示沿用节点内置 H3/Qwen 系统提示)
-SKILL_COMBO = ["无 (默认)"]
-SKILL_LABEL_TO_ID = {"无 (默认)": None}
-for _s in SKILL_REGISTRY:
-    _lab = f"{_s.id}｜{_s.display_name or _s.id}"
-    SKILL_COMBO.append(_lab)
-    SKILL_LABEL_TO_ID[_lab] = _s.id
-
 import folder_paths
 import comfy.model_management as mm
 import comfy.utils
@@ -314,7 +299,31 @@ class LLAMA_CPP_STORAGE:
         
         print(f"[llama-cpp_vlm] Loading model: {model}")
         print(f"[llama-cpp_vlm] n_gpu_layers = {n_gpu_layers}")
-        cls.llm = Llama(model_path, chat_handler=cls.chat_handler, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, verbose=False)
+
+        # 防止 n_ctx 超过模型训练上下文 (n_ctx_train) 导致加载失败:
+        # Qwen3.8 的 n_ctx_train=262144, 一旦超额会抛
+        # "n_ctx_seq (...) > n_ctx_train (262144)" 而崩溃。提前收敛并告警。
+        _n_ctx_train = _model_n_ctx_train(model_path)
+        if _n_ctx_train and _n_ctx_train > 0 and n_ctx > _n_ctx_train:
+            print(
+                f"[llama-cpp_vlm] WARNING: n_ctx={n_ctx} 超过模型训练上下文 n_ctx_train={_n_ctx_train}，"
+                f"已自动收敛到 {_n_ctx_train}。如需更大上下文请更换支持更大 n_ctx_train 的模型。"
+            )
+            n_ctx = _n_ctx_train
+
+        try:
+            cls.llm = Llama(model_path, chat_handler=cls.chat_handler, n_gpu_layers=n_gpu_layers, n_ctx=n_ctx, verbose=False)
+        except RuntimeError as e:
+            import re as _re
+            _msg = str(e)
+            _match = _re.search(r"n_ctx_train\s*\(\s*(\d+)\s*\)", _msg)
+            if _match:
+                raise RuntimeError(
+                    f"模型上下文加载失败：请求的 n_ctx 超过模型训练上下文 n_ctx_train={_match.group(1)}。"
+                    f"请把 Model Loader 的 n_ctx 调小到 ≤ {_match.group(1)}（例如 65536 或 32768），"
+                    f"或选择支持更大 n_ctx_train 的模型。原始错误：{_msg}"
+                ) from e
+            raise
 
 any_type = AnyType("*")
 
@@ -403,6 +412,32 @@ def _model_n_ctx():
             return v
     except Exception:
         pass
+    return 0
+
+
+def _model_n_ctx_train(model_path):
+    """从 GGUF 元数据读取模型训练上下文长度 (n_ctx_train)。读不到时返回 0。
+
+    用于防止 Model Loader 的 n_ctx 超过模型训练上下文而导致加载失败
+    (Qwen3.8 的 n_ctx_train=262144)。不同 GGUF 的元数据键名不一, 多候选兜底。
+    """
+    try:
+        from gguf import GGUFReader
+        reader = GGUFReader(model_path)
+        for key in ("qwen35.context_length", "llama.context_length", "n_ctx_train", "context_length"):
+            field = reader.fields.get(key)
+            if field is None:
+                continue
+            try:
+                value = field.contents()
+            except Exception:
+                value = None
+            if isinstance(value, (list, tuple)) and value:
+                value = value[0]
+            if isinstance(value, (int, float)) and value > 0:
+                return int(value)
+    except Exception:
+        return 0
     return 0
 
 
@@ -683,10 +718,6 @@ class llama_cpp_instruct_adv:
                     "default": "自动",
                     "tooltip": "风格技能 (源自 MiniMax 官方 H3 skills 包的 8 个风格生成器, 中文显示)。\n自动 = 按用户提示词关键词自动匹配; 无命中则不注入风格。\n选中具体技能时注入其风格要义 (视觉风格锁/制作重点/一致性规则), 输出结构仍遵循所 选生成模式的 H3 skill。仅 H3 模式生效。"
                 }),
-                "技能": (SKILL_COMBO, {
-                    "default": "无 (默认)",
-                    "tooltip": "数据驱动提示词 Skill (源自 ComfyUI-llama_Dapao/skills, 已移植到 support/skills)。\n无 (默认) = 使用节点内置 H3/Qwen 系统提示。\n选中后, 该 Skill 的 SKILL.md (含 references) 作为优化 pass 的系统提示, 替换内置提示词; 输出结构由所选 Skill 决定。仅 H3/Qwen 生成模式生效。"
-                }),
                 "无背景音乐": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "提示词优化: 无背景音乐 (仅 H3 模式生效, non_diegetic_music = N/A)"
@@ -759,7 +790,7 @@ class llama_cpp_instruct_adv:
                         item["image_url"]["url"] = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAADElEQVQImWP4//8/AAX+Av5Y8msOAAAAAElFTkSuQmCC"
         return clean_messages
     
-    def process(self, llama_model, preset_prompt, custom_prompt, 生成模式, 风格技能, 技能, 无背景音乐, system_prompt, inference_mode, max_frames, max_size, seed, force_offload, save_states, unique_id, parameters=None, video=None, images=None, image_1=None, image_2=None, image_3=None, image_4=None, image_5=None, image_6=None, image_7=None, image_8=None, image_9=None, image_10=None):
+    def process(self, llama_model, preset_prompt, custom_prompt, 生成模式, 风格技能, 无背景音乐, system_prompt, inference_mode, max_frames, max_size, seed, force_offload, save_states, unique_id, parameters=None, video=None, images=None, image_1=None, image_2=None, image_3=None, image_4=None, image_5=None, image_6=None, image_7=None, image_8=None, image_9=None, image_10=None):
         # 合并所有图像输入（含旧版工作流使用的 images 批量槽），平坦化为单张图像列表（不限制尺寸）
         # video 槽为 IMAGE 类型 (帧序列视为一段视频), 排在 images/image_N 之前
         all_images = []
@@ -882,10 +913,6 @@ class llama_cpp_instruct_adv:
                             "preserving every explicit requirement."
                         )
             if _src:
-                # 数据驱动 Skill (可选): 选中后用其 SKILL.md + references 作为优化系统提示,
-                # 替换节点内置 H3/Qwen 提示词; 未选中 (无 (默认)) 时保持原行为。
-                _skill_id = SKILL_LABEL_TO_ID.get(技能, None)
-
                 # 参考图一并送入优化 pass (按上下文预算自适应缩放, 避免超出 n_ctx)
                 has_images = images is not None
                 if has_images:
@@ -972,18 +999,8 @@ class llama_cpp_instruct_adv:
                             image_descriptions=opt_captions,
                             video_description=_video_desc,
                             caption_start_index=_caption_start,
-                            style_skill=(None if _skill_id else _style_label),
+                            style_skill=_style_label,
                         )
-                        if _skill_id:
-                            # 由输入素材推断 H3 模式代码 (ref2va/t2va/...), 决定读取哪份参考
-                            _hm = "t2va"
-                            try:
-                                _hm = _detect_skill_h3_mode(image_count, 1 if n_video > 0 else 0) or "t2va"
-                            except Exception:
-                                pass
-                            # 按模型上下文自适应限制 skill 参考文本长度, 避免撑爆 n_ctx
-                            _cap = max(6000, min(32000, (_n_ctx // 3) if _n_ctx > 0 else 32000))
-                            _sys = _load_skill_instructions(_skill_id, _hm, max_chars=_cap)
                         return _sys, _user, "<Picture {n}>"
                     _sys = build_qwen_image_system_prompt(生成模式, "仅英文")
                     _user = build_qwen_image_user_message(
@@ -992,9 +1009,6 @@ class llama_cpp_instruct_adv:
                         video_description=_video_desc,
                         caption_start_index=_caption_start,
                     )
-                    if _skill_id:
-                        _cap = max(6000, min(32000, (_n_ctx // 3) if _n_ctx > 0 else 32000))
-                        _sys = _load_skill_instructions(_skill_id, "", max_chars=_cap)
                     return _sys, _user, "<image{n}>"
 
                 _n_img = len(cap_uris)
@@ -1038,7 +1052,7 @@ class llama_cpp_instruct_adv:
 
                 # 格式守卫: H3 模式要求 [Shot N]/Audio: 结构。若模型只是把素材描述了一遍
                 # (没有按 skill 输出), 用一次纠正重试把它拉回模板结构。
-                if opt_text and 生成模式.startswith("H3") and not _skill_id and not _opt_matches_skill(opt_text, 生成模式):
+                if opt_text and 生成模式.startswith("H3") and not _opt_matches_skill(opt_text, 生成模式):
                     _has_repl = bool(_video_desc) and any((c or "").strip() for c in opt_captions)
                     _sys_p, _user_p, _label = _build_opt_pair(len(_used_uris))
                     _retry_user = _user_p + "\n\n" + _opt_correction_block(生成模式, _has_repl)
