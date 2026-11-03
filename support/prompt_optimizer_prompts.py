@@ -414,6 +414,18 @@ STYLE_SKILLS = {
         "cut-paper / pop-up-book / miniature look; explain the topic through staged reveals with character "
         "and scene continuity."
     ),
+    "真实类型": (
+        "Style: photorealistic live-action. Maintain photographic realism with natural skin texture, "
+        "accurate lighting, real-world physics, and authentic material responses. Preserve fine facial details, "
+        "natural color grading, and realistic depth of field. No cartoon stylization, no anime aesthetics. "
+        "Emphasize real-world camera language: shallow depth of field, natural bokeh, realistic shadows and reflections."
+    ),
+    "动漫类型": (
+        "Style: anime / manga-inspired animation. Clean line art, vibrant cel-shaded colors, stylized character "
+        "designs with expressive eyes and simplified proportions. Dynamic camera moves typical of anime, "
+        "exaggerated expressions and motion lines. Backgrounds with painterly or flat color fills. Maintain "
+        "consistent anime aesthetic throughout all shots, with clear cel boundaries and iconic anime lighting."
+    ),
 }
 
 # 自动推断关键词 (对用户提示词做匹配, 命中最多的技能生效; 无命中则不注入风格)
@@ -426,6 +438,8 @@ STYLE_SKILL_KEYWORDS = {
     "音乐视频字幕": ("音乐视频", "mv", "歌词", "字幕", "卡点", "music video"),
     "纸拼贴解说": ("纸拼贴", "拼贴", "剪纸", "半调", "halftone"),
     "纸艺定格解说": ("纸艺", "定格", "立体书", "纸偶", "微缩", "papercraft", "stop motion"),
+    "真实类型": ("真实", "照片", "写实", "photorealistic", "realistic", "real", "photo", "实拍", "写实风", "真人"),
+    "动漫类型": ("动漫", "anime", "动漫风", "漫画", "cartoon", "动画", "二次元", "japanese anime", "manga"),
 }
 
 
