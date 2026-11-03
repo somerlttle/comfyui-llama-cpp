@@ -122,14 +122,36 @@ This task uses reference media to transfer subject identities, characters, creat
 5. REPLACEMENT, NOT DESCRIPTION: when a source video is provided together with reference assets, the target video keeps the source's timeline, motion, camera movement, rhythm, and scene structure, but its subject(s), characters, or background are REPLACED by the reference assets. Do NOT restate what the source video looks like — write what the NEW target video must look like after the replacement.
 6. Format the output strictly as timed [Shot N] paragraphs, followed by the Audio: and Music: lines. Do NOT add section headers or field names. Start with 'Video' / 'Cinematic style' style statement, then [Shot 1] — never with a heading like '##Prompt##'. Do not output a description of the source video.""",
 
-    "Video to Video (V2V)": """## Task Type: Video-to-Video (V2V)
+    "Video to Video (V2V)": """## Task Type: Video-to-Video (V2V) - Replacement V2V
 
-This task writes a cinematic timeline description based on a reference video <Video 1> (the attached reference labels are frames evenly sampled from this ONE source video, in chronological order).
+subject_definitions
 
-### Storyboarding Rules:
-1. Divide the narrative into timed shots ([Shot 1], [Shot 2] At MM:SS.mmm).
-2. Follow the camera movement, rhythm, and shot structure of <Video 1>, applying the requested visual changes.
-3. Format the output strictly as a series of timed [Shot N] paragraphs, followed by the Audio: and Music: lines. Do NOT add section headers or field names.""",
+- <Picture 1>: the target Picture 1. Use the complete appearance of <CHARACTER APPEARANCE DESCRIPTION: hair style and color, face shape, facial features, makeup, skin tone, body frame>. She/He wears <FULL OUTFIT DESCRIPTION: top, bottom, material, colors, detailed accessories>. The reference includes full front, side, and back views, plus close-up details of the facial features, fabric texture, and outfit draping.
+- <Picture 2>: the additional performer Picture 2. Use the complete appearance of <CHARACTER APPEARANCE DESCRIPTION: hair style and color, face shape, facial features, makeup, skin tone, body frame>. She/He wears <FULL OUTFIT DESCRIPTION: top, bottom, material, colors, detailed accessories>. The reference includes full front, side, and back views, plus close-up details of the facial features, fabric texture, and outfit draping.
+- <Video 1>: the Video 1. Preserve the original performer's <MOTION AND PERFORMANCE DESCRIPTION: choreography, body rhythm, limb movements, gestures, interactions>, , , , shot framing, timing, and embedded audio. The original environment serves only as the motion and performance reference and is fully replaced by in the output.
+- <Picture 3>: the Picture 3 replacing the original environment — <Picture 3 DESCRIPTION: scene type, dominant colors, materials, light direction and color temperature, atmospheric elements, and constraints such as no text/logos>.
+
+summary
+video editing + reference generation. Replace the entire performer in <Video 1> with the complete character from <Picture 1>, including face, hair, skin tone, body proportions, and full outfit. Simultaneously introduce the additional performer from <Picture 2> as a second character who appears naturally alongside <Picture 1> in the same frame, matching the original performance rhythm, interaction timing, camera path, and framing. Replace the original background with <Picture 3>, recomposing lighting and reflections to fit the new environment for both characters. Keep every other element of the Video 1 unchanged: <ELEMENTS TO PRESERVE: choreography, foreground interactions, props, camera work, audio>. The transferred characters must remain temporally consistent and physically coherent throughout the entire sequence, and must sit naturally inside the Picture 3.
+
+retention_analysis
+- fully_preserved: <ELEMENTS TO PRESERVE IN FULL: choreography, body rhythm, limb movements, gestures, interaction timing, prop position, camera path, framing, overall handheld feel, original audio track>.
+- background_replaced: the entire original environment of <Video 1> is fully replaced by <Picture 3>. The new background's perspective, reflections, and lighting must be recomposed to match the original camera angle and the two transferred characters, with no mismatched shadows, reflections, or color casts.
+- attribute_transfer: transfer the complete physical identity from <Picture 1> onto the main performing character: , and the complete outfit: . Transfer the complete physical identity from <Picture 2> onto the additional performing character: , and the complete outfit: .
+- partially_preserved: preserve the original motion timing, body-driven movement dynamics, and choreography flow, but replace the performer's appearance, silhouette, skin, hair, face, and clothing with the character from <Picture 1>. The additional character from <Picture 2> must adapt to the same timing and interaction dynamics while preserving her/his own appearance, silhouette, skin, hair, face, and clothing. Both outfits must move naturally with the performance physics, responding to body movements in a physically plausible way.
+
+background_replacement
+Replace the entire original environment of <Video 1> with <Picture 3>. Keep the camera path, framing, and identical — only the environment behind and around the performers changes. Keep unchanged in appearance and timing. Re-light the scene to the new background's mood while preserving a key light on both performers so their faces, skin, and outfits remain consistent with <Picture 1> and <Picture 2> throughout the clip. Floors and reflective surfaces must show believable reflections of both performers consistent with their new outfits and the camera angle. The background must contain no text, logos, or readable signage unless specified, and must not introduce new foreground objects that occlude the performers or the interacting elements.
+
+detailed_description
+[Shot 1] Use <Video 1> as the exact motion, performance, camera, and timing reference for one continuous shot, and <Picture 3> as the new environment. Replace the entire performer with the complete character from <Picture 1>, wearing , while performing the same in <Picture 3> — . Introduce the additional performer from <Picture 2>, wearing , as a second character who performs alongside <Picture 1> in the same frame, following the original choreography, interaction timing, and camera movement. The main performer's flows with the momentum, maintaining its texture; the facial features and skin tone replace the original entirely and stay consistent across all visible body parts. The additional performer's flows with the momentum, maintaining its texture; the facial features and skin tone stay consistent across all visible body parts. The performers interact with , matching the original timing precisely, and continue to hold throughout the sequence. The camera maintains the same feel with in the lower-right foreground, now set against the new background. The transferred characters must maintain strict temporal consistency: no face drifting, no hair color shifting, no skin tone fluctuation, no body proportion changes, and no outfit texture or color inconsistencies across the entire clip. Lighting and reflections must stay stable and coherent with the new background. must deform naturally with each movement, staying physically attached without clipping or floating; must move believably with the body motions.
+
+overall_soundscape
+Preserve the original audio from <Video 1> entirely, including <AUDIO COMPONENTS: background music, rhythmic beats, vocals>. Adjust only the ambient room tone to match the new background: replace the original acoustics with <Picture 3 ACOUSTICS DESCRIPTION>.
+
+non_diegetic_music
+<AUDIO STRATEGY OPTION: Retain the original music track and its exact timing from <Video 1> / Replace with  with timing synced to the performance.>
+""",
 }
 
 
@@ -296,7 +318,7 @@ H3_MODES = (
     "H3 - 首尾帧 (FL2VA)",
     "H3 - 尾帧 (L2VA)",
     "H3 - 全参考 (Ref2VA)",
-    "H3 - 视频生视频 (V2V)",
+    "H3 - 替换v2v",
 )
 
 QWEN_IMAGE_MODES = (
@@ -316,7 +338,7 @@ H3_MODE_ZH_TO_EN = {
     "首尾帧 (FL2VA)": "First+Last Frame (FL2VA)",
     "尾帧 (L2VA)": "Last Frame (L2VA)",
     "全参考 (Ref2VA)": "Full Reference (Ref2VA)",
-    "视频生视频 (V2V)": "Video to Video (V2V)",
+    "替换v2v": "Video to Video (V2V)",
     "自动": "Auto",
 }
 
