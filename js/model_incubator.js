@@ -104,7 +104,7 @@ app.registerExtension({
                 if(!alive||busy||dialog?.isConnected)return;
                 busy=true;rollingKey=rollKey;render();status.textContent="正在更新…";
                 try{await action();}catch(error){if(alive)status.textContent=`操作失败：${error.message}`;}
-                finally{busy=false;rollingKey=null;render();if(pendingRefresh&&alive){pendingRefresh=false;void act(()=>refresh(false));}}
+                finally{busy=false;rollingKey=null;render();if(pendingRefresh&&alive){pendingRefresh=false;void act(()=>refresh(false));}else if(alive && !status.textContent.startsWith("操作失败") && !status.textContent.startsWith("组合已")){status.textContent="";}}
             }
             function change(action) {
                 node.graph?.beforeChange?.();
@@ -161,7 +161,7 @@ app.registerExtension({
                 const token=epoch, seed=seedWidget.value;
                 const response=await api.fetchApi(`/gallery/model-incubator/prompt?seed=${encodeURIComponent(seed)}`);
                 const result=await response.json();if(!response.ok)throw Error(result.error||"提示词读取失败");
-                if(!alive||token!==epoch)return;prompt.value=result.prompt;
+                if(!alive||token!==epoch){status.textContent="";return;}prompt.value=result.prompt;
                 const skipped=new Set();
                 for(const {target,edge} of targets(3)) {
                     if(edge.target_slot===0&&["PreviewAny","ShowText|pysssss","easy showAnything"].includes(target.comfyClass||target.type)&&target.onExecuted)target.onExecuted({text:[result.prompt]});
@@ -170,7 +170,7 @@ app.registerExtension({
                 const complete=kinds.every(kind=>!!url(kind));
                 const shouldCreate=autoCreate&&complete&&!node.outputs?.some(o=>o.links?.length);
                 const images=await Promise.all(kinds.map(async (kind,slot)=>{if(onlySlot!==null&&slot!==onlySlot&&!shouldCreate)return null;const src=url(kind);if(!src)return null;const image=new Image();image.src=src;await image.decode();return image;}));
-                if(!alive||token!==epoch)return;
+                if(!alive||token!==epoch){status.textContent="";return;}
                 if(shouldCreate&&!node.outputs?.some(o=>o.links?.length))createPreviews();
                 for(let slot=0;slot<3;slot++)if(images[slot])for(const {target,edge} of targets(slot)) {
                     if(edge.target_slot===0&&(target.comfyClass||target.type)==="PreviewImage")showConnectedPreview(target,images[slot]);
