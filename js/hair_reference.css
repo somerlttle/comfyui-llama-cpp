@@ -1,0 +1,11 @@
+/* Hairstyle gallery: reuses the shared .ref-pose dialog tokens. */
+.ref-hair .dp-main { grid-template-columns:minmax(0,1fr) 340px; }
+.ref-hair .dh-card { display:flex; flex-direction:column; gap:6px; text-align:left; }
+.ref-hair .dh-card img { display:block; width:100%; aspect-ratio:4/5; object-fit:contain; background:#ececec; border-radius:6px; }
+.ref-hair .dh-card strong { font-size:13px; }
+.ref-hair .dh-card small { font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ref-hair .dp-detail-image { height:340px; background:#ececec; border-radius:8px; }
+.ref-hair header select { min-width:140px; }
+.ref-hair-node .dpn-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.ref-hair-node > button:not(.dpn-open):not(.dpn-card) { min-height:34px; padding:6px 10px; }
+@media(max-width:760px) { .ref-hair .dp-main { grid-template-columns:1fr; } }

@@ -3,6 +3,7 @@ import { api } from "../../scripts/api.js";
 import { openFaceGallery } from "./face_reference.js";
 import { openCostumeGallery } from "./costume_reference.js";
 import { openPoseGallery } from "./pose_reference.js";
+import { openHairGallery } from "./hair_reference.js";
 import { showConnectedPreview } from "./reference_controls.js";
 
 const SINGLE = new Set(["全身单人・标准系", "全身单人・性感系", "上半身单人"]);
@@ -10,6 +11,7 @@ const kinds = [
     {key:"face", label:"脸模", emoji:"👩", open:openFaceGallery},
     {key:"costume", label:"服装", emoji:"👗", open:openCostumeGallery},
     {key:"pose", label:"姿势", emoji:"🧍", open:openPoseGallery},
+    {key:"hair", label:"发型", emoji:"💇", open:openHairGallery},
 ];
 const el = (tag, cls = "", text = "") => Object.assign(document.createElement(tag), {className:cls, textContent:text});
 const button = (text, action) => { const b = el("button", "", text); b.type="button"; b.onclick=action; return b; };
@@ -34,19 +36,19 @@ app.registerExtension({
             const getWidget=name=>node.widgets.find(w=>w.name===name);
             const get=(kind, field)=>getWidget(`${kind.emoji}${kind.label}${field}`).value;
             const put=(kind, field, value)=>{getWidget(`${kind.emoji}${kind.label}${field}`).value=value;};
-            const seedWidget=getWidget("🎲提示词种子"), hairSeedWidget=getWidget("🎲发型种子")||{value:0};
+            const seedWidget=getWidget("🎲提示词种子");
             // Serialized native widgets remain the source of truth; the compact UI edits them.
             for (const w of [...node.widgets]) {
-                if (w === seedWidget || w === hairSeedWidget || kinds.some(k=>w.name.startsWith(`${k.emoji}${k.label}`))) {
+                if (w === seedWidget || kinds.some(k=>w.name.startsWith(`${k.emoji}${k.label}`))) {
                     w.type="dmi-hidden"; w.computeSize=()=>[0,-4];
                     if(w.options)w.options.hidden=true;
                 }
             }
             const toolbar=el("div","dmi-toolbar"), random=button("",()=>act(randomize,"all"));
-            const dice=el("span","dmi-dice","🎲"); random.append(dice,document.createTextNode(" 随机组合"));random.title="随机图库位置，保留上传图片；同时变换提示词";
+            const dice=el("span","dmi-dice","🎲"); random.append(dice,document.createTextNode(" 随机组合"));random.title="随机四路图库位置，保留上传图片；同时变换提示词";
             const preview=button("更新下游预览",()=>act(()=>refresh(true)));
             toolbar.append(random,preview);
-            root.append(el("strong","","三图组合 · 单人模特"),el("small","","1 脸模 → 2 服装 → 3 姿势 · 上传图片不参与随机"),toolbar);
+            root.append(el("strong","","四图组合 · 单人模特"),el("small","","1 脸模 → 2 服装 → 3 姿势 → 4 发型 · 上传图片不参与随机"),toolbar);
             const grid=el("div","dmi-grid");root.append(grid);
             for(const [index,kind] of kinds.entries()) {
                 const card=el("section","dmi-card"), image=el("img"), label=el("small","dmi-selection");image.alt=`图片${index+1} ${kind.label}参考`;
@@ -65,23 +67,13 @@ app.registerExtension({
                 card.append(heading,source,image,label,choose,upload,file);grid.append(card);
                 rows.push({kind,source,image,label,choose,upload,roll});
             }
-            const hair=el("textarea","dmi-hair");hair.readOnly=true;hair.setAttribute("aria-label","随机发型");hair.placeholder="随机发型提示词";
-            const hairBar=el("div","dmi-hair-bar");
-            const hairRoll=button("🎲 换发型",()=>void act(()=>rollHair()));
-            const hairCopy=button("复制发型",async()=>{try{await navigator.clipboard.writeText(hair.value);status.textContent="发型已复制";}catch{hair.focus();hair.select();status.textContent="请按 Ctrl+C 复制选中的发型";}});
-            hairBar.append(hairRoll,hairCopy);
-            root.append(el("b","","💇 随机发型"),hair,hairBar);
-            async function rollHair() {
-                change(()=>{hairSeedWidget.value=(Number(hairSeedWidget.value)+1+Math.floor(Math.random()*9999))%2147483647;});
-                await refresh(false);
-            }
-            const prompt=el("textarea","dmi-prompt");prompt.readOnly=true;prompt.setAttribute("aria-label","整合提示词");prompt.placeholder="选择三张素材后，可连接整合提示词输出使用";
+            const prompt=el("textarea","dmi-prompt");prompt.readOnly=true;prompt.setAttribute("aria-label","整合提示词");prompt.placeholder="选择四张素材后，可连接整合提示词输出使用";
             const copy=button("复制提示词",async()=>{try{await navigator.clipboard.writeText(prompt.value);status.textContent="提示词已复制";}catch{prompt.focus();prompt.select();status.textContent="请按 Ctrl+C 复制选中的提示词";}});
             const status=el("div","dpn-message");status.setAttribute("role","status");
-            root.append(el("b","","✨ 整合提示词（最后一个输出）"),prompt,copy,status,el("small","","输出三张独立参考图 + 随机发型 + 整合提示词；成片需连接生图节点后手动运行。自传姿势请使用单人图。"));
+            root.append(el("b","","✨ 整合提示词（最后一个输出）"),prompt,copy,status,el("small","","输出四张独立参考图（含发型图）+ 整合提示词；成片需连接生图节点后手动运行。自传姿势请使用单人图。"));
             for(const event of ["pointerdown","keydown","wheel"])root.addEventListener(event,e=>e.stopPropagation());
-            const dom=node.addDOMWidget("model_incubator","model_incubator",root,{serialize:false,getMinHeight:()=>790,getHeight:()=>790,hideOnZoom:false,hideInPanel:true});
-            dom.options??={};dom.options.minNodeSize=[560,0];dom.computeSize=w=>[Math.max(560,w||0),790];node.setSize([Math.max(node.size[0],560),Math.max(node.size[1],920)]);
+            const dom=node.addDOMWidget("model_incubator","model_incubator",root,{serialize:false,getMinHeight:()=>900,getHeight:()=>900,hideOnZoom:false,hideInPanel:true});
+            dom.options??={};dom.options.minNodeSize=[620,0];dom.computeSize=w=>[Math.max(620,w||0),900];node.setSize([Math.max(node.size[0],620),Math.max(node.size[1],1030)]);
             const configure=node.onConfigure;
             node.onConfigure=function(){epoch++;const result=configure?.apply(this,arguments);queueMicrotask(()=>{if(alive){render();if(busy)pendingRefresh=true;else void act(()=>refresh(false));}});return result;};
             const removed=node.onRemoved;
@@ -137,7 +129,7 @@ app.registerExtension({
                 await new Promise(resolve=>setTimeout(resolve,480));
                 if(!alive||epoch!==token)return;
                 node.graph?.beforeChange?.();
-                try{for(const item of changes)if(item)put(item[0],"ID",item[1]);if(!onlyKind){seedWidget.value=(Number(seedWidget.value)+1+Math.floor(Math.random()*8))%2147483647;hairSeedWidget.value=(Number(hairSeedWidget.value)+1+Math.floor(Math.random()*97))%2147483647;}}
+                try{for(const item of changes)if(item)put(item[0],"ID",item[1]);if(!onlyKind)seedWidget.value=(Number(seedWidget.value)+1+Math.floor(Math.random()*8))%2147483647;}
                 finally{node.graph?.afterChange?.();}
                 render();await refresh(true,onlyKind?kinds.indexOf(onlyKind):null);
             }
@@ -168,15 +160,15 @@ app.registerExtension({
                 }).filter(v=>v?.target);
             }
             async function refresh(autoCreate, onlySlot=null) {
-                const token=epoch, seed=seedWidget.value, hseed=hairSeedWidget.value;
-                const response=await api.fetchApi(`/gallery/model-incubator/prompt?${new URLSearchParams({seed,hseed})}`);
+                const token=epoch, seed=seedWidget.value;
+                const response=await api.fetchApi(`/gallery/model-incubator/prompt?${new URLSearchParams({seed})}`);
                 const result=await response.json();if(!response.ok)throw Error(result.error||"提示词读取失败");
                 if(!alive||token!==epoch){status.textContent="";return;}
-                prompt.value=result.prompt;hair.value=result.hairstyle||"";
+                prompt.value=result.prompt;
                 const skipped=new Set();
-                // slot 3 = 随机发型, slot 4 = 整合提示词 (最后一个输出)
-                for(const [slot,text] of [[3,result.hairstyle],[4,result.prompt]]) for(const {target,edge} of targets(slot)) {
-                    if(edge.target_slot===0&&["PreviewAny","ShowText|pysssss","easy showAnything"].includes(target.comfyClass||target.type)&&target.onExecuted)target.onExecuted({text:[text||""]});
+                // slot 4 = 整合提示词 (最后一个输出); 0-3 为四张参考图
+                for(const {target,edge} of targets(4)) {
+                    if(edge.target_slot===0&&["PreviewAny","ShowText|pysssss","easy showAnything"].includes(target.comfyClass||target.type)&&target.onExecuted)target.onExecuted({text:[result.prompt]});
                     else skipped.add(target.title||target.type);
                 }
                 const complete=kinds.every(kind=>!!url(kind));
@@ -184,20 +176,20 @@ app.registerExtension({
                 const images=await Promise.all(kinds.map(async (kind,slot)=>{if(onlySlot!==null&&slot!==onlySlot&&!shouldCreate)return null;const src=url(kind);if(!src)return null;const image=new Image();image.src=src;await image.decode();return image;}));
                 if(!alive||token!==epoch){status.textContent="";return;}
                 if(shouldCreate&&!node.outputs?.some(o=>o.links?.length))createPreviews();
-                for(let slot=0;slot<3;slot++)if(images[slot])for(const {target,edge} of targets(slot)) {
+                for(let slot=0;slot<kinds.length;slot++)if(images[slot])for(const {target,edge} of targets(slot)) {
                     if(edge.target_slot===0&&(target.comfyClass||target.type)==="PreviewImage")showConnectedPreview(target,images[slot]);
                     else skipped.add(target.title||target.type);
                 }
-                status.textContent=!complete?"请补齐三张素材；已选素材可单独预览。":skipped.size?`组合已更新；${[...skipped].join("、")}需手动运行工作流。`:"组合已就绪，参考图与提示词已更新。";
+                status.textContent=!complete?"请补齐四张素材；已选素材可单独预览。":skipped.size?`组合已更新；${[...skipped].join("、")}需手动运行工作流。`:"组合已就绪，参考图与提示词已更新。";
             }
             function createPreviews() {
                 const graph=node.graph;if(!graph)throw Error("节点已离开画布");const added=[];
                 graph.beforeChange?.();
                 try {
-                    for(let slot=0;slot<3;slot++) {
+                    for(let slot=0;slot<kinds.length;slot++) {
                         const target=globalThis.LiteGraph?.createNode("PreviewImage");if(!target)throw Error("无法创建预览图像，请刷新页面后重试");
                         target.title=`图片${slot+1} · ${kinds[slot].label}`;target.size=[320,360];
-                        const x=node.pos[0]+node.size[0]+80;let y=node.pos[1]+slot*420;
+                        const x=node.pos[0]+node.size[0]+80+(slot%2)*350;let y=node.pos[1]+Math.floor(slot/2)*420;
                         const others=graph.nodes||graph._nodes||[];
                         for(let attempt=0;attempt<=others.length;attempt++) {
                             const overlap=others.find(n=>n!==node&&n.pos&&n.size&&x<n.pos[0]+n.size[0]+24&&x+344>n.pos[0]&&y<n.pos[1]+n.size[1]+40&&y+400>n.pos[1]);
