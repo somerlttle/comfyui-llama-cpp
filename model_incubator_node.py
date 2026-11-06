@@ -1,5 +1,6 @@
 """Local three-reference composition. Never invokes generation or an LLM."""
 import json
+import random
 from pathlib import Path
 
 import folder_paths
@@ -14,6 +15,32 @@ KINDS = (("脸模", "👩", face), ("服装", "👗", costume), ("姿势", "🧍
 SINGLE_SYSTEMS = {"全身单人・标准系", "全身单人・性感系", "上半身单人"}
 LIGHTS = ("柔和的大面积侧光，阴影自然过渡", "均匀柔和的棚拍光，细节层次清晰", "自然漫射光，肤色中性，避免强烈色偏")
 BACKGROUNDS = ("简洁的浅灰无缝背景", "干净的暖白摄影背景", "低干扰的中性灰摄影空间")
+
+# 随机发型词库: 造型 / 发色 / 质感细节 三个维度按种子组合, 保证可复现且变化充足
+HAIR_STYLES = (
+    "及肩波浪短发", "过肩大波浪长发", "齐刘海波波头", "高马尾", "低马尾", "双马尾",
+    "蓬松羊毛卷", "慵懒丸子头", "低盘发", "法式侧编发", "锁骨发", "公主切",
+    "层次感碎发", "空气感短发", "复古手推波纹", "半扎公主头", "湿发背头", "蓬松蛋卷头",
+)
+HAIR_COLORS = (
+    "乌黑", "深棕", "亚麻金", "雾感灰棕", "板栗棕", "奶茶棕", "黑茶",
+    "玫瑰棕", "冷调亚麻", "焦糖棕", "自然黑", "浅金",
+)
+HAIR_DETAILS = (
+    "发尾微卷，自然蓬松", "发丝光泽顺滑，层次清晰", "碎发轻柔修饰脸型",
+    "发根蓬松，轮廓柔和", "发尾内扣，线条干净", "轻薄空气刘海，随动作自然摆动",
+    "发量丰盈，随动作自然起伏", "发丝纹理清晰，避免僵硬板结",
+)
+
+
+def hairstyle_prompt(seed):
+    """按发型种子生成一段可复现的随机发型描述 (中文, 可直接接入下游提示词)。"""
+    rng = random.Random(int(seed))
+    return (
+        f"发型：{rng.choice(HAIR_COLORS)}色的{rng.choice(HAIR_STYLES)}，{rng.choice(HAIR_DETAILS)}。"
+        "发丝走向与头部光照一致，随动作自然摆动，不遮挡五官，发际线与头皮衔接真实，"
+        "避免出现多余发饰、文字或水印。"
+    )
 
 
 def integrated_prompt(seed):
@@ -52,7 +79,12 @@ def resolve_source(label, emoji, module, values):
 @PromptServer.instance.routes.get("/gallery/model-incubator/prompt")
 async def get_prompt(request):
     try:
-        return web.json_response({"prompt": integrated_prompt(request.query.get("seed", 0))})
+        seed = int(request.query.get("seed", 0))
+        hseed = int(request.query.get("hseed", 0))
+        return web.json_response({
+            "prompt": integrated_prompt(seed),
+            "hairstyle": hairstyle_prompt(hseed),
+        })
     except (ValueError, TypeError):
         return web.json_response({"error": "提示词种子无效"}, status=400)
 
@@ -66,13 +98,15 @@ class ModelIncubator:
             required[f"{emoji}{label}ID"] = ("STRING", {"default": ""})
             required[f"{emoji}{label}上传"] = ("STRING", {"default": ""})
         required["🎲提示词种子"] = ("INT", {"default": 0, "min": 0, "max": 2147483647})
+        required["🎲发型种子"] = ("INT", {"default": 0, "min": 0, "max": 2147483647})
         return {"required": required}
 
-    RETURN_TYPES = ("IMAGE", "IMAGE", "IMAGE", "STRING")
-    RETURN_NAMES = ("👩图片1·脸模", "👗图片2·服装", "🧍图片3·姿势", "✨整合提示词")
+    # 整合提示词固定排在最后; 随机发型输出位于三张参考图之后、整合提示词之前
+    RETURN_TYPES = ("IMAGE", "IMAGE", "IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("👩图片1·脸模", "👗图片2·服装", "🧍图片3·姿势", "💇随机发型", "✨整合提示词")
     FUNCTION = "compose"
     CATEGORY = "📚 本地图库"
-    DESCRIPTION = "三路图库或自传图片组合，输出三张独立参考图及本地模板提示词；本节点不生成成片、不运行模型。"
+    DESCRIPTION = "三路图库或自传图片组合，输出三张独立参考图、随机发型提示词及整合提示词；本节点不生成成片、不运行模型。"
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
@@ -82,6 +116,8 @@ class ModelIncubator:
                 path = resolve_source(label, emoji, module, kwargs)
                 stat = path.stat()
                 stamps.append((str(path), stat.st_mtime_ns, stat.st_size))
+            stamps.append(kwargs.get("🎲提示词种子", 0))
+            stamps.append(kwargs.get("🎲发型种子", 0))
             return json.dumps(stamps)
         except (ValueError, OSError):
             return float("nan")
@@ -91,7 +127,8 @@ class ModelIncubator:
         for label, emoji, module in KINDS:
             with Image.open(resolve_source(label, emoji, module, kwargs)) as image:
                 images.append(pil2tensor(ImageOps.exif_transpose(image)))
-        return (*images, integrated_prompt(kwargs.get("🎲提示词种子", 0)))
+        hair = hairstyle_prompt(kwargs.get("🎲发型种子", 0))
+        return (*images, hair, integrated_prompt(kwargs.get("🎲提示词种子", 0)))
 
 
 NODE_CLASS_MAPPINGS = {"ModelIncubator": ModelIncubator}
