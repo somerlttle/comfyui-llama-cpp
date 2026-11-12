@@ -48,12 +48,12 @@ app.registerExtension({
             const dice=el("span","dmi-dice","🎲"); random.append(dice,document.createTextNode(" 随机组合"));random.title="随机四路图库位置，保留上传图片；同时变换提示词";
             const preview=button("更新下游预览",()=>act(()=>refresh(true)));
             toolbar.append(random,preview);
-            root.append(el("strong","","四图组合 · 单人模特"),el("small","","1 脸模 → 2 服装 → 3 姿势 → 4 发型 · 上传图片不参与随机"),toolbar);
+            root.append(el("strong","","四图组合 · 单人模特"),el("small","","1 脸模 → 2 服装 → 3 姿势 → 4 发型 · 上传图片不参与随机；未选或选「不参考」的图片自动跳过"),toolbar);
             const grid=el("div","dmi-grid");root.append(grid);
             for(const [index,kind] of kinds.entries()) {
                 const card=el("section","dmi-card"), image=el("img"), label=el("small","dmi-selection");image.alt=`图片${index+1} ${kind.label}参考`;
                 const source=el("select");source.setAttribute("aria-label",`${kind.label}来源`);
-                for(const mode of ["素材库","上传图片"])source.add(new Option(mode,mode));
+                for(const mode of ["素材库","上传图片","不参考"])source.add(new Option(mode,mode));
                 source.onchange=()=>{const value=source.value;void act(async()=>{change(()=>put(kind,"来源",value));render();await refresh(true);});};
                 const choose=button("打开素材库",()=>openGallery(kind));
                 const upload=button("上传图片",()=>file.click());
@@ -65,12 +65,12 @@ app.registerExtension({
                 roll.append(el("span","dmi-dice","🎲"));
                 heading.append(el("b","",`${kind.emoji} ${index+1} · ${kind.label}`),roll);
                 card.append(heading,source,image,label,choose,upload,file);grid.append(card);
-                rows.push({kind,source,image,label,choose,upload,roll});
+                rows.push({kind,card,source,image,label,choose,upload,roll});
             }
             const prompt=el("textarea","dmi-prompt");prompt.readOnly=true;prompt.setAttribute("aria-label","整合提示词");prompt.placeholder="选择四张素材后，可连接整合提示词输出使用";
             const copy=button("复制提示词",async()=>{try{await navigator.clipboard.writeText(prompt.value);status.textContent="提示词已复制";}catch{prompt.focus();prompt.select();status.textContent="请按 Ctrl+C 复制选中的提示词";}});
             const status=el("div","dpn-message");status.setAttribute("role","status");
-            root.append(el("b","","✨ 整合提示词（最后一个输出）"),prompt,copy,status,el("small","","输出四张独立参考图（含发型图）+ 整合提示词；成片需连接生图节点后手动运行。自传姿势请使用单人图。"));
+            root.append(el("b","","✨ 整合提示词（最后一个输出）"),prompt,copy,status,el("small","","输出四张独立参考图（含发型图）+ 整合提示词；未选的参考图会跳过并从提示词中省略。成片需连接生图节点后手动运行。自传姿势请使用单人图。"));
             for(const event of ["pointerdown","keydown","wheel"])root.addEventListener(event,e=>e.stopPropagation());
             const dom=node.addDOMWidget("model_incubator","model_incubator",root,{serialize:false,getMinHeight:()=>900,getHeight:()=>900,hideOnZoom:false,hideInPanel:true});
             dom.options??={};dom.options.minNodeSize=[620,0];dom.computeSize=w=>[Math.max(620,w||0),900];node.setSize([Math.max(node.size[0],620),Math.max(node.size[1],1030)]);
@@ -80,7 +80,9 @@ app.registerExtension({
             node.onRemoved=function(){alive=false;epoch++;dialog?.close();return removed?.apply(this,arguments);};
 
             function url(kind) {
-                if(get(kind,"来源")==="上传图片") {
+                const mode=get(kind,"来源");
+                if(mode==="不参考")return "";
+                if(mode==="上传图片") {
                     const name=get(kind,"上传");if(!name)return "";
                     const normalized=name.replaceAll("\\","/"), pos=normalized.lastIndexOf("/");
                     return api.apiURL(`/view?${new URLSearchParams({filename:normalized.slice(pos+1),subfolder:pos<0?"":normalized.slice(0,pos),type:"input"})}`);
@@ -91,14 +93,16 @@ app.registerExtension({
                 if(!alive)return;
                 random.disabled=preview.disabled=busy;random.classList.toggle("dmi-rolling",busy&&rollingKey==="all");
                 for(const row of rows) {
-                    const {kind,source,image,label,choose,upload,roll}=row, uploaded=get(kind,"来源")==="上传图片";
-                    roll.disabled=busy||uploaded;
-                    roll.title=uploaded?"上传图片保持不变；切换为素材库后可随机":`只随机${kind.label}，其他素材和提示词保持不变`;
+                    const {kind,card,source,image,label,choose,upload,roll}=row;
+                    const mode=get(kind,"来源"), uploaded=mode==="上传图片", skipped=mode==="不参考";
+                    card.classList.toggle("dmi-skipped",skipped);
+                    roll.disabled=busy||uploaded||skipped;
+                    roll.title=skipped?"切换为素材库后可随机":uploaded?"上传图片保持不变；切换为素材库后可随机":`只随机${kind.label}，其他素材和提示词保持不变`;
                     roll.classList.toggle("dmi-rolling",busy&&rollingKey===kind.key);
-                    source.value=get(kind,"来源");source.disabled=choose.disabled=upload.disabled=busy;
-                    choose.hidden=uploaded;upload.hidden=!uploaded;
+                    source.value=mode;source.disabled=choose.disabled=upload.disabled=busy;
+                    choose.hidden=uploaded||skipped;upload.hidden=!uploaded;
                     const src=url(kind);image.hidden=!src;if(src&&image.getAttribute("src")!==src)image.src=src;if(!src)image.removeAttribute("src");
-                    label.textContent=(uploaded?get(kind,"上传"):get(kind,"ID"))||"尚未选择";label.title=label.textContent;
+                    label.textContent=skipped?"不参考 · 该图片已跳过":(uploaded?get(kind,"上传"):get(kind,"ID"))||"尚未选择 · 自动跳过，不参与提示词";label.title=label.textContent;
                 }
                 node.setDirtyCanvas?.(true,true);
             }
@@ -122,7 +126,7 @@ app.registerExtension({
             async function randomize(onlyKind=null) {
                 const token=epoch;
                 const changes=await Promise.all((onlyKind?[onlyKind]:kinds).map(async kind=>{
-                    if(get(kind,"来源")==="上传图片")return null;
+                    if(get(kind,"来源")!=="素材库")return null;
                     const list=await catalog(kind), other=list.filter(i=>i.id!==get(kind,"ID")), pool=other.length?other:list;
                     return [kind,pool[Math.floor(Math.random()*pool.length)].id];
                 }));
@@ -161,7 +165,8 @@ app.registerExtension({
             }
             async function refresh(autoCreate, onlySlot=null) {
                 const token=epoch, seed=seedWidget.value;
-                const response=await api.fetchApi(`/gallery/model-incubator/prompt?${new URLSearchParams({seed})}`);
+                const active=kinds.map(kind=>url(kind)?"1":"0").join("");
+                const response=await api.fetchApi(`/gallery/model-incubator/prompt?${new URLSearchParams({seed,active})}`);
                 const result=await response.json();if(!response.ok)throw Error(result.error||"提示词读取失败");
                 if(!alive||token!==epoch){status.textContent="";return;}
                 prompt.value=result.prompt;
@@ -171,7 +176,8 @@ app.registerExtension({
                     if(edge.target_slot===0&&["PreviewAny","ShowText|pysssss","easy showAnything"].includes(target.comfyClass||target.type)&&target.onExecuted)target.onExecuted({text:[result.prompt]});
                     else skipped.add(target.title||target.type);
                 }
-                const complete=kinds.every(kind=>!!url(kind));
+                const count=[...active].filter(bit=>bit==="1").length;
+                const complete=count===kinds.length;
                 const shouldCreate=autoCreate&&complete&&!node.outputs?.some(o=>o.links?.length);
                 const images=await Promise.all(kinds.map(async (kind,slot)=>{if(onlySlot!==null&&slot!==onlySlot&&!shouldCreate)return null;const src=url(kind);if(!src)return null;const image=new Image();image.src=src;await image.decode();return image;}));
                 if(!alive||token!==epoch){status.textContent="";return;}
@@ -180,7 +186,7 @@ app.registerExtension({
                     if(edge.target_slot===0&&(target.comfyClass||target.type)==="PreviewImage")showConnectedPreview(target,images[slot]);
                     else skipped.add(target.title||target.type);
                 }
-                status.textContent=!complete?"请补齐四张素材；已选素材可单独预览。":skipped.size?`组合已更新；${[...skipped].join("、")}需手动运行工作流。`:"组合已就绪，参考图与提示词已更新。";
+                status.textContent=!complete?`组合已更新：已选 ${count}/4 张参考图；未选的自动跳过，提示词已同步省略。`:skipped.size?`组合已更新；${[...skipped].join("、")}需手动运行工作流。`:"组合已就绪，参考图与提示词已更新。";
             }
             function createPreviews() {
                 const graph=node.graph;if(!graph)throw Error("节点已离开画布");const added=[];
